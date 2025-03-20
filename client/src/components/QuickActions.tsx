@@ -25,7 +25,7 @@ const QuickActions: React.FC = () => {
               onClick={() => setIsSendModalOpen(true)}
             >
               <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center mb-2">
-                <PaperPlane className="h-4 w-4 text-primary" />
+                <Send className="h-4 w-4 text-primary" />
               </div>
               <span className="text-xs text-gray-700">Send</span>
             </Button>
