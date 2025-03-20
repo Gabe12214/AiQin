@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
+import { insertNetworkSchema } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // GET all networks
@@ -30,6 +31,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.json(network);
     } catch (error) {
       return res.status(500).json({ message: "Failed to fetch network" });
+    }
+  });
+
+  // POST create new network
+  app.post("/api/networks", async (req: Request, res: Response) => {
+    try {
+      const parsedData = insertNetworkSchema.safeParse(req.body);
+      if (!parsedData.success) {
+        return res.status(400).json({ 
+          message: "Invalid network data", 
+          errors: parsedData.error.format() 
+        });
+      }
+
+      // Check if network with this chainId already exists
+      const existingNetwork = await storage.getNetworkByChainId(parsedData.data.chainId);
+      if (existingNetwork) {
+        return res.status(409).json({ 
+          message: "A network with this chain ID already exists",
+          network: existingNetwork
+        });
+      }
+      
+      const network = await storage.createNetwork(parsedData.data);
+      return res.status(201).json(network);
+    } catch (error) {
+      console.error("Error creating network:", error);
+      return res.status(500).json({ message: "Failed to create network" });
     }
   });
 

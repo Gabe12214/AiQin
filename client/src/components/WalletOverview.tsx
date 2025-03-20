@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useWallet } from '@/hooks/useWallet';
 import { useTokens } from '@/hooks/useTokens';
 import { Button } from '@/components/ui/button';
 import { 
   Card, 
-  CardContent, 
+  CardContent,
+  CardDescription, 
   CardHeader 
 } from '@/components/ui/card';
 import { 
@@ -12,17 +13,27 @@ import {
   RotateCw, 
   Coins,
   DollarSign,
-  ExternalLink
+  ExternalLink,
+  ExternalLinkIcon
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Badge } from '@/components/ui/badge';
 
 const WalletOverview: React.FC = () => {
-  const { account, disconnect } = useWallet();
+  const { 
+    account, 
+    disconnect, 
+    balance, 
+    currentNetwork,
+    chainId 
+  } = useWallet();
   const { nativeTokenInfo, tokenBalances, totalValueUSD, refreshBalances, isLoading } = useTokens();
   const { toast } = useToast();
+  const [ethPrice, setEthPrice] = useState<number>(2000); // Default ETH price
   
   // Helper functions
   const truncateAddress = (address: string) => {
+    if (!address) return '';
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
   
@@ -48,6 +59,12 @@ const WalletOverview: React.FC = () => {
     switch (symbol) {
       case 'ETH':
         return <Coins className="text-gray-700" />;
+      case 'MATIC':
+        return <Coins className="text-purple-700" />;
+      case 'AVAX':
+        return <Coins className="text-red-700" />;
+      case 'BNB':
+        return <Coins className="text-yellow-700" />;
       case 'USDC':
         return <DollarSign className="text-green-700" />;
       case 'LINK':
@@ -57,7 +74,55 @@ const WalletOverview: React.FC = () => {
     }
   };
   
-  const nativeToken = nativeTokenInfo();
+  const getTokenColor = (symbol: string) => {
+    switch (symbol) {
+      case 'ETH': return 'bg-blue-100';
+      case 'MATIC': return 'bg-purple-100';
+      case 'AVAX': return 'bg-red-100';
+      case 'BNB': return 'bg-yellow-100';
+      case 'USDC': return 'bg-green-100';
+      case 'LINK': return 'bg-blue-100';
+      default: return 'bg-gray-100';
+    }
+  };
+  
+  const openBlockExplorer = () => {
+    if (!account || !currentNetwork?.blockExplorerUrl) return;
+    
+    const url = `${currentNetwork.blockExplorerUrl}/address/${account}`;
+    window.open(url, '_blank');
+  };
+  
+  // For demo purposes, simulate a USD value based on the network's native token
+  useEffect(() => {
+    const fetchPrice = async () => {
+      // In a real app, you would fetch the price from an API
+      // Here we're using mock prices for demonstration
+      if (currentNetwork) {
+        switch (currentNetwork.symbol) {
+          case 'ETH':
+            setEthPrice(2000);
+            break;
+          case 'MATIC':
+            setEthPrice(0.6);
+            break;
+          case 'AVAX':
+            setEthPrice(11);
+            break;
+          case 'BNB':
+            setEthPrice(220);
+            break;
+          default:
+            setEthPrice(100);
+        }
+      }
+    };
+    
+    fetchPrice();
+  }, [currentNetwork]);
+  
+  // Calculate the native token value in USD
+  const tokenValueUSD = balance ? parseFloat(balance) * ethPrice : 0;
   
   return (
     <div className="mb-6">
@@ -77,6 +142,16 @@ const WalletOverview: React.FC = () => {
                   >
                     <Copy className="h-4 w-4" />
                   </Button>
+                  {currentNetwork?.blockExplorerUrl && (
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="text-primary hover:text-primary/80 p-0 h-auto"
+                      onClick={openBlockExplorer}
+                    >
+                      <ExternalLinkIcon className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
@@ -85,6 +160,11 @@ const WalletOverview: React.FC = () => {
                 <div className="w-3 h-3 rounded-full bg-green-500 mr-2"></div>
                 <span className="text-sm text-gray-600">Connected</span>
               </div>
+              {currentNetwork && (
+                <Badge variant="outline" className="my-1">
+                  {currentNetwork.name}
+                </Badge>
+              )}
               <Button 
                 variant="ghost" 
                 size="sm" 
@@ -100,14 +180,13 @@ const WalletOverview: React.FC = () => {
         {/* Total Balance Section */}
         <CardContent className="p-6 border-b border-gray-100">
           <div className="flex justify-between items-center">
-            <h3 className="text-gray-500 text-sm">Total Balance</h3>
-            <span className="text-sm text-gray-500">≈ {formatUSD(totalValueUSD)} USD</span>
+            <h3 className="text-gray-500 text-sm">Balance on {currentNetwork?.name || 'Network'}</h3>
+            <span className="text-sm text-gray-500">≈ {formatUSD(tokenValueUSD)} USD</span>
           </div>
           <div className="mt-2 flex items-end">
             <span className="text-3xl font-bold text-gray-800">
-              {parseFloat(nativeToken.balance).toFixed(3)} {nativeToken.symbol}
+              {parseFloat(balance || '0').toFixed(5)} {currentNetwork?.symbol || 'ETH'}
             </span>
-            <span className="ml-2 text-xs px-2 py-1 bg-green-100 text-green-800 rounded">+2.4%</span>
           </div>
         </CardContent>
         
@@ -130,50 +209,53 @@ const WalletOverview: React.FC = () => {
           {/* Native Token (ETH, MATIC, etc.) */}
           <div className="border-b border-gray-100 py-3 flex justify-between items-center">
             <div className="flex items-center">
-              <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center mr-3">
-                <Coins className="h-4 w-4 text-gray-700" />
+              <div className={`w-8 h-8 rounded-full ${getTokenColor(currentNetwork?.symbol || 'ETH')} flex items-center justify-center mr-3`}>
+                {getTokenIcon(currentNetwork?.symbol || 'ETH')}
               </div>
               <div>
-                <h4 className="font-medium text-gray-800">{nativeToken.name}</h4>
-                <p className="text-xs text-gray-500">{nativeToken.symbol}</p>
+                <h4 className="font-medium text-gray-800">{currentNetwork?.name || 'Ethereum'}</h4>
+                <p className="text-xs text-gray-500">{currentNetwork?.symbol || 'ETH'}</p>
               </div>
             </div>
             <div className="text-right">
-              <p className="font-medium text-gray-800">{parseFloat(nativeToken.balance).toFixed(3)} {nativeToken.symbol}</p>
-              <p className="text-xs text-gray-500">{formatUSD(nativeToken.value)}</p>
+              <p className="font-medium text-gray-800">{parseFloat(balance || '0').toFixed(5)} {currentNetwork?.symbol || 'ETH'}</p>
+              <p className="text-xs text-gray-500">{formatUSD(tokenValueUSD)}</p>
             </div>
           </div>
           
-          {/* ERC-20 Tokens */}
-          {tokenBalances.map((token, index) => (
-            <div 
-              key={index} 
-              className={`${index < tokenBalances.length - 1 ? 'border-b border-gray-100' : ''} py-3 flex justify-between items-center`}
-            >
-              <div className="flex items-center">
-                <div className={`w-8 h-8 rounded-full ${
-                  token.symbol === 'LINK' ? 'bg-blue-100' : 
-                  token.symbol === 'USDC' ? 'bg-green-100' : 'bg-gray-100'
-                } flex items-center justify-center mr-3`}>
-                  {getTokenIcon(token.symbol)}
+          {/* ERC-20 Tokens - depending on current network, we could show different tokens */}
+          {tokenBalances.length > 0 ? (
+            tokenBalances.map((token, index) => (
+              <div 
+                key={index} 
+                className={`${index < tokenBalances.length - 1 ? 'border-b border-gray-100' : ''} py-3 flex justify-between items-center`}
+              >
+                <div className="flex items-center">
+                  <div className={`w-8 h-8 rounded-full ${getTokenColor(token.symbol)} flex items-center justify-center mr-3`}>
+                    {getTokenIcon(token.symbol)}
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-gray-800">{token.name}</h4>
+                    <p className="text-xs text-gray-500">{token.symbol}</p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="font-medium text-gray-800">{token.name}</h4>
-                  <p className="text-xs text-gray-500">{token.symbol}</p>
+                <div className="text-right">
+                  <p className="font-medium text-gray-800">{parseFloat(token.balance).toFixed(2)} {token.symbol}</p>
+                  <p className="text-xs text-gray-500">{formatUSD(token.value)}</p>
                 </div>
               </div>
-              <div className="text-right">
-                <p className="font-medium text-gray-800">{parseFloat(token.balance).toFixed(2)} {token.symbol}</p>
-                <p className="text-xs text-gray-500">{formatUSD(token.value)}</p>
+            ))
+          ) : (
+            parseFloat(balance || '0') === 0 ? (
+              <div className="py-8 text-center text-gray-500">
+                No assets found in this wallet on {currentNetwork?.name}
               </div>
-            </div>
-          ))}
-          
-          {/* Empty state if no tokens */}
-          {tokenBalances.length === 0 && parseFloat(nativeToken.balance) === 0 && (
-            <div className="py-8 text-center text-gray-500">
-              No assets found in this wallet
-            </div>
+            ) : (
+              <div className="py-4 text-center text-gray-500 text-sm">
+                <p>No additional tokens found on this network.</p>
+                <p className="mt-1">Use the 'Send' feature to add tokens to your wallet.</p>
+              </div>
+            )
           )}
         </CardContent>
       </Card>

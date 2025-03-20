@@ -83,6 +83,30 @@ export class MemStorage implements IStorage {
         symbol: "MATIC",
         blockExplorerUrl: "https://polygonscan.com",
         isDefault: false
+      },
+      {
+        name: "Arbitrum One",
+        chainId: 42161,
+        rpcUrl: "https://arb1.arbitrum.io/rpc",
+        symbol: "ETH",
+        blockExplorerUrl: "https://arbiscan.io",
+        isDefault: false
+      },
+      {
+        name: "Avalanche C-Chain",
+        chainId: 43114,
+        rpcUrl: "https://api.avax.network/ext/bc/C/rpc",
+        symbol: "AVAX",
+        blockExplorerUrl: "https://snowtrace.io",
+        isDefault: false
+      },
+      {
+        name: "BNB Smart Chain",
+        chainId: 56,
+        rpcUrl: "https://bsc-dataseed.binance.org",
+        symbol: "BNB",
+        blockExplorerUrl: "https://bscscan.com",
+        isDefault: false
       }
     ];
 
@@ -134,7 +158,14 @@ export class MemStorage implements IStorage {
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = this.currentUserId++;
     const now = new Date();
-    const user: User = { ...insertUser, id, createdAt: now };
+    // Ensure all required fields are present
+    const user: User = {
+      ...insertUser,
+      id,
+      createdAt: now,
+      walletAddress: insertUser.walletAddress || null,
+      isAdmin: insertUser.isAdmin || false
+    };
     this.users.set(id, user);
     return user;
   }
@@ -165,7 +196,12 @@ export class MemStorage implements IStorage {
 
   async createNetwork(insertNetwork: InsertNetwork): Promise<Network> {
     const id = this.currentNetworkId++;
-    const network: Network = { ...insertNetwork, id };
+    // Ensure all required fields are present
+    const network: Network = {
+      ...insertNetwork,
+      id,
+      isDefault: insertNetwork.isDefault || false
+    };
     this.networks.set(id, network);
     return network;
   }
@@ -247,6 +283,30 @@ export class PgStorage implements IStorage {
           rpcUrl: "https://polygon-rpc.com",
           symbol: "MATIC",
           blockExplorerUrl: "https://polygonscan.com",
+          isDefault: false
+        },
+        {
+          name: "Arbitrum One",
+          chainId: 42161,
+          rpcUrl: "https://arb1.arbitrum.io/rpc",
+          symbol: "ETH",
+          blockExplorerUrl: "https://arbiscan.io",
+          isDefault: false
+        },
+        {
+          name: "Avalanche C-Chain",
+          chainId: 43114,
+          rpcUrl: "https://api.avax.network/ext/bc/C/rpc",
+          symbol: "AVAX",
+          blockExplorerUrl: "https://snowtrace.io",
+          isDefault: false
+        },
+        {
+          name: "BNB Smart Chain",
+          chainId: 56,
+          rpcUrl: "https://bsc-dataseed.binance.org",
+          symbol: "BNB",
+          blockExplorerUrl: "https://bscscan.com",
           isDefault: false
         }
       ];
