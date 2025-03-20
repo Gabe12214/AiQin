@@ -4,6 +4,8 @@ import {
   transactions, type Transaction, type InsertTransaction,
   dapps, type Dapp, type InsertDapp
 } from "@shared/schema";
+import { eq, and } from "drizzle-orm";
+import { db } from "./database";
 
 export interface IStorage {
   // User methods
@@ -213,4 +215,170 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+// PostgreSQL Storage Implementation
+export class PgStorage implements IStorage {
+  
+  // Default data initialization
+  async initializeDefaultData() {
+    const networkCount = await db.select().from(networks).execute();
+    
+    // Only initialize if there are no networks yet
+    if (networkCount.length === 0) {
+      const defaultNetworks: InsertNetwork[] = [
+        {
+          name: "Ethereum",
+          chainId: 1,
+          rpcUrl: "https://mainnet.infura.io/v3/",
+          symbol: "ETH",
+          blockExplorerUrl: "https://etherscan.io",
+          isDefault: true
+        },
+        {
+          name: "Sepolia",
+          chainId: 11155111,
+          rpcUrl: "https://sepolia.infura.io/v3/",
+          symbol: "ETH",
+          blockExplorerUrl: "https://sepolia.etherscan.io",
+          isDefault: false
+        },
+        {
+          name: "Polygon",
+          chainId: 137,
+          rpcUrl: "https://polygon-rpc.com",
+          symbol: "MATIC",
+          blockExplorerUrl: "https://polygonscan.com",
+          isDefault: false
+        }
+      ];
+
+      for (const network of defaultNetworks) {
+        await this.createNetwork(network);
+      }
+    }
+
+    const dappCount = await db.select().from(dapps).execute();
+    
+    // Only initialize if there are no dapps yet
+    if (dappCount.length === 0) {
+      const defaultDapps: InsertDapp[] = [
+        {
+          name: "Uniswap",
+          url: "https://app.uniswap.org",
+          description: "Decentralized Exchange",
+          category: "DeFi",
+          logoUrl: "uniswap"
+        },
+        {
+          name: "OpenSea",
+          url: "https://opensea.io",
+          description: "NFT Marketplace",
+          category: "NFT",
+          logoUrl: "opensea"
+        }
+      ];
+
+      for (const dapp of defaultDapps) {
+        await this.createDapp(dapp);
+      }
+    }
+  }
+
+  // User methods
+  async getUser(id: number): Promise<User | undefined> {
+    const results = await db.select().from(users).where(eq(users.id, id)).execute();
+    return results[0];
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const results = await db.select().from(users).where(eq(users.username, username)).execute();
+    return results[0];
+  }
+
+  async getUserByWalletAddress(walletAddress: string): Promise<User | undefined> {
+    const results = await db.select().from(users).where(eq(users.walletAddress, walletAddress)).execute();
+    return results[0];
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const results = await db.insert(users).values(insertUser).returning().execute();
+    return results[0];
+  }
+
+  async updateUserWalletAddress(id: number, walletAddress: string): Promise<User | undefined> {
+    const results = await db
+      .update(users)
+      .set({ walletAddress })
+      .where(eq(users.id, id))
+      .returning()
+      .execute();
+    return results[0];
+  }
+
+  // Network methods
+  async getNetworks(): Promise<Network[]> {
+    return await db.select().from(networks).execute();
+  }
+
+  async getNetwork(id: number): Promise<Network | undefined> {
+    const results = await db.select().from(networks).where(eq(networks.id, id)).execute();
+    return results[0];
+  }
+
+  async getNetworkByChainId(chainId: number): Promise<Network | undefined> {
+    const results = await db.select().from(networks).where(eq(networks.chainId, chainId)).execute();
+    return results[0];
+  }
+
+  async createNetwork(insertNetwork: InsertNetwork): Promise<Network> {
+    const results = await db.insert(networks).values(insertNetwork).returning().execute();
+    return results[0];
+  }
+
+  // Transaction methods
+  async getTransactions(userId: number): Promise<Transaction[]> {
+    return await db.select().from(transactions).where(eq(transactions.userId, userId)).execute();
+  }
+
+  async getTransaction(id: number): Promise<Transaction | undefined> {
+    const results = await db.select().from(transactions).where(eq(transactions.id, id)).execute();
+    return results[0];
+  }
+
+  async createTransaction(insertTransaction: InsertTransaction): Promise<Transaction> {
+    const results = await db.insert(transactions).values(insertTransaction).returning().execute();
+    return results[0];
+  }
+
+  async updateTransactionStatus(id: number, status: string): Promise<Transaction | undefined> {
+    const results = await db
+      .update(transactions)
+      .set({ status })
+      .where(eq(transactions.id, id))
+      .returning()
+      .execute();
+    return results[0];
+  }
+
+  // Dapp methods
+  async getDapps(): Promise<Dapp[]> {
+    return await db.select().from(dapps).execute();
+  }
+
+  async getDapp(id: number): Promise<Dapp | undefined> {
+    const results = await db.select().from(dapps).where(eq(dapps.id, id)).execute();
+    return results[0];
+  }
+
+  async createDapp(insertDapp: InsertDapp): Promise<Dapp> {
+    const results = await db.insert(dapps).values(insertDapp).returning().execute();
+    return results[0];
+  }
+}
+
+// Use PostgreSQL storage
+export const storage = new PgStorage();
+
+// Initialize default data
+storage.initializeDefaultData().catch(err => {
+  console.error("Failed to initialize default data:", err);
+});
