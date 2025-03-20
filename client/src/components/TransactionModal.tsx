@@ -416,4 +416,4 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       </DialogContent>
     </Dialog>
   );
-};
+}

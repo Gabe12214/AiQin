@@ -11,7 +11,7 @@ import {
   Layout,
   LogOut,
   Menu,
-  X
+  X,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -38,7 +38,11 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
     { href: "/admin", label: "Dashboard", icon: <BarChart3 size={20} /> },
     { href: "/admin/users", label: "Users", icon: <Users size={20} /> },
     { href: "/admin/networks", label: "Networks", icon: <Globe size={20} /> },
-    { href: "/admin/transactions", label: "Transactions", icon: <CircleDollarSign size={20} /> },
+    {
+      href: "/admin/transactions",
+      label: "Transactions",
+      icon: <CircleDollarSign size={20} />,
+    },
     { href: "/admin/dapps", label: "DApps", icon: <Layout size={20} /> },
   ];
 
@@ -109,9 +113,7 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
           </div>
         </header>
 
-        <main className="p-4 sm:p-6 lg:p-8">
-          {children}
-        </main>
+        <main className="p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
 
       {/* Backdrop for mobile */}

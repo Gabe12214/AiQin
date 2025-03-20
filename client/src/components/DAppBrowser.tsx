@@ -2,7 +2,13 @@ import { useState } from "react";
 import { ExternalLink, Search, Globe, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -24,30 +30,40 @@ interface DAppBrowserProps {
   network: Network | null;
 }
 
-export default function DAppBrowser({ dapps, isLoading, walletAddress, network }: DAppBrowserProps) {
+export default function DAppBrowser({
+  dapps,
+  isLoading,
+  walletAddress,
+  network,
+}: DAppBrowserProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("all");
-  
+
   // Get unique categories from dapps
-  const categories = ["all", ...Array.from(new Set(dapps.map(dapp => dapp.category.toLowerCase())))];
-  
+  const categories = [
+    "all",
+    ...Array.from(new Set(dapps.map((dapp) => dapp.category.toLowerCase()))),
+  ];
+
   // Filter dapps based on search query and category
-  const filteredDapps = dapps.filter(dapp => {
-    const matchesSearch = dapp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         dapp.description.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesCategory = activeCategory === "all" || 
-                           dapp.category.toLowerCase() === activeCategory.toLowerCase();
-    
+  const filteredDapps = dapps.filter((dapp) => {
+    const matchesSearch =
+      dapp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      dapp.description.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchesCategory =
+      activeCategory === "all" ||
+      dapp.category.toLowerCase() === activeCategory.toLowerCase();
+
     return matchesSearch && matchesCategory;
   });
 
   const launchDapp = (url: string) => {
     // Append wallet address as a query parameter if provided
-    const dappUrl = walletAddress ? 
-      `${url}${url.includes('?') ? '&' : '?'}wallet=${walletAddress}&chainId=${network?.chainId || 1}` : 
-      url;
-    
+    const dappUrl = walletAddress
+      ? `${url}${url.includes("?") ? "&" : "?"}wallet=${walletAddress}&chainId=${network?.chainId || 1}`
+      : url;
+
     window.open(dappUrl, "_blank");
   };
 
@@ -87,16 +103,16 @@ export default function DAppBrowser({ dapps, isLoading, walletAddress, network }
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-        <Tabs 
-          defaultValue="all" 
+        <Tabs
+          defaultValue="all"
           value={activeCategory}
           onValueChange={setActiveCategory}
           className="w-full sm:w-auto"
         >
           <TabsList className="h-10">
-            {categories.slice(0, 4).map(category => (
-              <TabsTrigger 
-                key={category} 
+            {categories.slice(0, 4).map((category) => (
+              <TabsTrigger
+                key={category}
                 value={category}
                 className="capitalize"
               >
@@ -113,19 +129,21 @@ export default function DAppBrowser({ dapps, isLoading, walletAddress, network }
       {filteredDapps.length === 0 ? (
         <div className="text-center py-10 text-muted-foreground">
           <p>No dApps found</p>
-          <p className="text-sm mt-2">Try a different search term or category</p>
+          <p className="text-sm mt-2">
+            Try a different search term or category
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredDapps.map(dapp => (
+          {filteredDapps.map((dapp) => (
             <Card key={dapp.id}>
               <CardHeader className="pb-2">
                 <div className="flex justify-between items-start">
                   <div className="flex items-center">
                     {dapp.logoUrl ? (
-                      <img 
-                        src={dapp.logoUrl} 
-                        alt={`${dapp.name} logo`} 
+                      <img
+                        src={dapp.logoUrl}
+                        alt={`${dapp.name} logo`}
                         className="w-10 h-10 rounded-md mr-3 object-contain"
                       />
                     ) : (
@@ -135,7 +153,10 @@ export default function DAppBrowser({ dapps, isLoading, walletAddress, network }
                     )}
                     <div>
                       <CardTitle className="text-lg">{dapp.name}</CardTitle>
-                      <Badge variant="outline" className="text-xs capitalize mt-1">
+                      <Badge
+                        variant="outline"
+                        className="text-xs capitalize mt-1"
+                      >
                         {dapp.category}
                       </Badge>
                     </div>
@@ -148,18 +169,19 @@ export default function DAppBrowser({ dapps, isLoading, walletAddress, network }
                 </p>
               </CardContent>
               <CardFooter className="flex justify-between">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  asChild
-                >
-                  <a href={dapp.url} target="_blank" rel="noopener noreferrer" className="flex items-center">
+                <Button variant="outline" size="sm" asChild>
+                  <a
+                    href={dapp.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center"
+                  >
                     Visit site
                     <ExternalLink className="h-3 w-3 ml-1" />
                   </a>
                 </Button>
-                <Button 
-                  size="sm" 
+                <Button
+                  size="sm"
                   onClick={() => launchDapp(dapp.url)}
                   disabled={!walletAddress}
                 >
