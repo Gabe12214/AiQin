@@ -5,26 +5,40 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
+import UserDashboard from "@/pages/user/Dashboard";
+import UserWallet from "@/pages/user/Wallet";
+import UserTransactions from "@/pages/user/Transactions";
+import UserDapps from "@/pages/user/Dapps";
+import UserLogin from "@/pages/user/Login";
 
-// We'll create these admin pages next
-const AdminLogin = () => <div>Admin Login</div>;
-const AdminDashboard = () => <div>Admin Dashboard</div>;
-const AdminUsers = () => <div>Admin Users</div>;
-const AdminNetworks = () => <div>Admin Networks</div>;
-const AdminTransactions = () => <div>Admin Transactions</div>;
-const AdminDapps = () => <div>Admin DApps</div>;
+// Admin pages
+import AdminLogin from "@/pages/admin/Login";
+import AdminDashboard from "@/pages/admin/Dashboard";
+import AdminUsers from "@/pages/admin/Users";
+import AdminNetworks from "@/pages/admin/Networks";
+import AdminTransactions from "@/pages/admin/Transactions";
+import AdminDapps from "@/pages/admin/Dapps";
+import AdminUserBalances from "@/pages/admin/UserBalances";
 
-// Auth context for admin
+// Auth context 
+interface User {
+  id: number;
+  username: string;
+  isAdmin: boolean;
+}
+
 interface AuthContextType {
+  user: User | null;
   isAuthenticated: boolean;
-  adminId: number | null;
-  login: (adminId: number) => void;
+  isAdmin: boolean;
+  login: (user: User) => void;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
+  user: null,
   isAuthenticated: false,
-  adminId: null,
+  isAdmin: false,
   login: () => {},
   logout: () => {},
 });
@@ -33,45 +47,89 @@ export const useAuth = () => useContext(AuthContext);
 
 // Auth Provider
 const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [adminId, setAdminId] = useState<number | null>(
-    localStorage.getItem("adminId") ? parseInt(localStorage.getItem("adminId") as string) : null
-  );
+  // Initialize state from localStorage if available
+  const [user, setUser] = useState<User | null>(() => {
+    const savedUser = localStorage.getItem("user");
+    if (savedUser) {
+      try {
+        return JSON.parse(savedUser);
+      } catch (e) {
+        console.error("Failed to parse user from localStorage");
+        return null;
+      }
+    }
+    return null;
+  });
   
-  const login = (adminId: number) => {
-    localStorage.setItem("adminId", adminId.toString());
-    setAdminId(adminId);
+  const isAuthenticated = !!user;
+  const isAdmin = !!user?.isAdmin;
+  
+  const login = (userData: User) => {
+    localStorage.setItem("user", JSON.stringify(userData));
+    setUser(userData);
   };
   
   const logout = () => {
-    localStorage.removeItem("adminId");
-    setAdminId(null);
+    localStorage.removeItem("user");
+    setUser(null);
   };
   
   return (
-    <AuthContext.Provider value={{ isAuthenticated: !!adminId, adminId, login, logout }}>
+    <AuthContext.Provider value={{ user, isAuthenticated, isAdmin, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-// Admin route wrapper that redirects to login if not authenticated
-const AdminRoute: React.FC<{ path: string; component: React.ComponentType }> = ({ path, component }) => {
-  const { isAuthenticated } = useAuth();
+// Protected route that requires user authentication
+const ProtectedRoute: React.FC<{ 
+  path: string; 
+  component: React.ComponentType;
+  requireAdmin?: boolean;
+}> = ({ path, component, requireAdmin = false }) => {
+  const { isAuthenticated, isAdmin } = useAuth();
   const [, navigate] = useLocation();
   
   useEffect(() => {
     if (!isAuthenticated) {
-      navigate("/admin/login");
+      navigate(requireAdmin ? "/admin/login" : "/login");
+    } else if (requireAdmin && !isAdmin) {
+      // Redirect non-admin users trying to access admin routes
+      navigate("/");
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, isAdmin, navigate, requireAdmin]);
   
-  return isAuthenticated ? <Route path={path} component={component} /> : null;
+  // Only render if user meets the authentication requirements
+  if (!isAuthenticated) return null;
+  if (requireAdmin && !isAdmin) return null;
+  
+  return <Route path={path} component={component} />;
+};
+
+// Admin route is just a specialized protected route
+const AdminRoute: React.FC<{ path: string; component: React.ComponentType }> = ({ path, component }) => {
+  return <ProtectedRoute path={path} component={component} requireAdmin={true} />;
+};
+
+// User route is a protected route that doesn't require admin
+const UserRoute: React.FC<{ path: string; component: React.ComponentType }> = ({ path, component }) => {
+  return <ProtectedRoute path={path} component={component} requireAdmin={false} />;
 };
 
 function AppRouter() {
+  const { isAdmin } = useAuth();
+
   return (
     <Switch>
-      <Route path="/" component={Home} />
+      {/* Public routes */}
+      <Route path="/" component={isAdmin ? AdminDashboard : Home} />
+      <Route path="/login" component={UserLogin} />
+      
+      {/* User routes */}
+      <UserRoute path="/dashboard" component={UserDashboard} />
+      <UserRoute path="/wallet" component={UserWallet} />
+      <UserRoute path="/transactions" component={UserTransactions} />
+      <UserRoute path="/dapps" component={UserDapps} />
       
       {/* Admin routes */}
       <Route path="/admin/login" component={AdminLogin} />
@@ -80,6 +138,7 @@ function AppRouter() {
       <AdminRoute path="/admin/networks" component={AdminNetworks} />
       <AdminRoute path="/admin/transactions" component={AdminTransactions} />
       <AdminRoute path="/admin/dapps" component={AdminDapps} />
+      <AdminRoute path="/admin/user-balances" component={AdminUserBalances} />
       
       {/* Fallback to 404 */}
       <Route component={NotFound} />

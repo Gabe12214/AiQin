@@ -368,6 +368,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get user balances - Admin only
+  app.get("/api/admin/user-balances/:userId", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const userId = parseInt(req.params.userId);
+      if (isNaN(userId)) {
+        return res.status(400).json({ message: "Invalid user ID" });
+      }
+      
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      if (!user.walletAddress) {
+        return res.status(400).json({ message: "User has no wallet address" });
+      }
+      
+      // Get all networks
+      const networks = await storage.getNetworks();
+      
+      // For demo purposes, we'll generate mock balances
+      // In a real app, you would query the blockchain or your database
+      const balances: Record<number, string> = {};
+      
+      for (const network of networks) {
+        // Generate some random balance for demo
+        const randomBalance = (Math.random() * 10).toFixed(4);
+        balances[network.id] = randomBalance;
+      }
+      
+      return res.json(balances);
+    } catch (error) {
+      console.error("Error fetching user balances:", error);
+      return res.status(500).json({ message: "Failed to fetch user balances" });
+    }
+  });
+  
+  // Update user balance - Admin only
+  app.post("/api/admin/user-balances", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const balanceSchema = z.object({
+        userId: z.number(),
+        networkId: z.number(),
+        amount: z.string(),
+        operation: z.enum(['add', 'subtract', 'set'])
+      });
+      
+      const parsedData = balanceSchema.safeParse(req.body);
+      if (!parsedData.success) {
+        return res.status(400).json({ 
+          message: "Invalid balance data", 
+          errors: parsedData.error.format() 
+        });
+      }
+      
+      const { userId, networkId, amount, operation } = parsedData.data;
+      
+      // Verify user exists
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Verify network exists
+      const network = await storage.getNetwork(networkId);
+      if (!network) {
+        return res.status(404).json({ message: "Network not found" });
+      }
+      
+      // In a real application, you would update the user's balance on the blockchain
+      // or in your database. For this demo, we'll just create a transaction record.
+      
+      // Create a transaction to record this admin operation
+      const transactionData = {
+        userId,
+        networkId,
+        hash: `admin_${Date.now()}`,
+        from: "admin",
+        to: user.walletAddress || "unknown",
+        value: amount,
+        status: "completed"
+      };
+      
+      const transaction = await storage.createTransaction(transactionData);
+      
+      return res.json({
+        success: true,
+        message: `User balance ${operation}ed successfully`,
+        transaction
+      });
+    } catch (error) {
+      console.error("Error updating user balance:", error);
+      return res.status(500).json({ message: "Failed to update user balance" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

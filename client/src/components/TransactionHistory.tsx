@@ -1,130 +1,155 @@
-import React from 'react';
-import { useTransactions } from '@/hooks/useTransactions';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { ArrowDown, ArrowUp, Coins, Receipt } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { ExternalLink, Clock, AlertCircle, CheckCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Network } from "@/hooks/useWallet";
 
-const TransactionHistory: React.FC = () => {
-  const { transactions, isLoading } = useTransactions();
+interface Transaction {
+  id: number;
+  hash: string;
+  from: string;
+  to: string;
+  value: string;
+  networkId: number;
+  status: string;
+  timestamp: string;
+}
 
-  // Helper function to truncate address
-  const truncateAddress = (address: string) => {
-    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+interface TransactionHistoryProps {
+  transactions: Transaction[];
+  isLoading: boolean;
+  networks: Network[];
+}
+
+export default function TransactionHistory({ transactions, isLoading, networks }: TransactionHistoryProps) {
+  // Format address for display
+  const formatAddress = (address: string) => {
+    if (!address) return "";
+    return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
   };
 
-  // Format amount with symbol
-  const formatAmount = (value: string, type: string) => {
-    const symbol = 'ETH'; // This would be dynamic based on the network
-    return `${type === 'sent' ? '-' : '+'} ${value} ${symbol}`;
+  // Format date for display
+  const formatDate = (timestamp: string) => {
+    try {
+      const date = new Date(timestamp);
+      return date.toLocaleString();
+    } catch (error) {
+      return timestamp;
+    }
   };
 
-  // Helper to determine transaction type
-  const getTransactionType = (from: string, to: string, account?: string) => {
-    if (!account) return 'unknown';
-    if (from.toLowerCase() === account.toLowerCase()) return 'sent';
-    if (to.toLowerCase() === account.toLowerCase()) return 'received';
-    return 'unknown';
+  // Get network symbol by network ID
+  const getNetworkSymbol = (networkId: number) => {
+    const network = networks.find(n => n.id === networkId);
+    return network?.symbol || "ETH";
   };
 
-  // Get transaction icon based on type
-  const getTransactionIcon = (type: string) => {
-    switch (type) {
-      case 'sent':
+  // Get explorer URL for transaction
+  const getExplorerUrl = (hash: string, networkId: number) => {
+    const network = networks.find(n => n.id === networkId);
+    if (!network || !network.blockExplorerUrl) return "#";
+    return `${network.blockExplorerUrl}/tx/${hash}`;
+  };
+
+  // Get status badge
+  const StatusBadge = ({ status }: { status: string }) => {
+    switch (status?.toLowerCase()) {
+      case "completed":
+      case "success":
         return (
-          <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center mr-3">
-            <ArrowUp className="h-5 w-5" />
-          </div>
+          <Badge variant="outline" className="bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-400 border-green-200 dark:border-green-800">
+            <CheckCircle className="h-3 w-3 mr-1" />
+            Completed
+          </Badge>
         );
-      case 'received':
+      case "pending":
         return (
-          <div className="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center mr-3">
-            <ArrowDown className="h-5 w-5" />
-          </div>
+          <Badge variant="outline" className="bg-yellow-50 text-yellow-600 dark:bg-yellow-950 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800">
+            <Clock className="h-3 w-3 mr-1" />
+            Pending
+          </Badge>
+        );
+      case "failed":
+        return (
+          <Badge variant="outline" className="bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-400 border-red-200 dark:border-red-800">
+            <AlertCircle className="h-3 w-3 mr-1" />
+            Failed
+          </Badge>
         );
       default:
         return (
-          <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mr-3">
-            <Coins className="h-5 w-5" />
-          </div>
+          <Badge variant="outline">
+            {status || "Unknown"}
+          </Badge>
         );
     }
   };
 
-  // Get title based on transaction type
-  const getTransactionTitle = (type: string) => {
-    switch (type) {
-      case 'sent':
-        return 'Sent ETH';
-      case 'received':
-        return 'Received ETH';
-      default:
-        return 'Transaction';
-    }
-  };
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="flex items-center p-4 border rounded-lg">
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-4 w-[250px]" />
+              <Skeleton className="h-3 w-[200px]" />
+            </div>
+            <Skeleton className="h-8 w-8 rounded-full" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (transactions.length === 0) {
+    return (
+      <div className="text-center py-10 text-muted-foreground">
+        <p>No transactions found</p>
+        <p className="text-sm mt-2">Transactions will appear here once you start interacting with the blockchain</p>
+      </div>
+    );
+  }
 
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="p-6 border-b border-gray-100">
-        <h3 className="font-semibold text-gray-700">Recent Transactions</h3>
-      </CardHeader>
-
-      <div className="divide-y divide-gray-100">
-        {/* Empty state */}
-        {transactions.length === 0 && !isLoading && (
-          <div className="p-6 text-center">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
-              <Receipt className="h-6 w-6 text-gray-400" />
+    <div className="space-y-4">
+      {transactions.map((tx) => (
+        <div key={tx.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
+          <div className="space-y-1 mb-2 sm:mb-0">
+            <div className="flex items-center">
+              <span className="font-medium">Transaction</span>
+              <Button 
+                variant="link" 
+                size="sm" 
+                className="text-xs pl-1 h-auto" 
+                asChild
+              >
+                <a href={getExplorerUrl(tx.hash, tx.networkId)} target="_blank" rel="noopener noreferrer" className="flex items-center">
+                  {formatAddress(tx.hash)}
+                  <ExternalLink className="h-3 w-3 ml-1" />
+                </a>
+              </Button>
             </div>
-            <p className="text-gray-500">No transactions yet</p>
+            
+            <div className="text-sm text-muted-foreground grid grid-cols-2 gap-x-4 gap-y-1">
+              <span>From:</span>
+              <span className="font-mono">{formatAddress(tx.from)}</span>
+              
+              <span>To:</span>
+              <span className="font-mono">{formatAddress(tx.to)}</span>
+              
+              <span>Amount:</span>
+              <span>{tx.value} {getNetworkSymbol(tx.networkId)}</span>
+              
+              <span>Date:</span>
+              <span>{formatDate(tx.timestamp)}</span>
+            </div>
           </div>
-        )}
-
-        {/* Loading state */}
-        {isLoading && (
-          <div className="p-6 text-center">
-            <p className="text-gray-500">Loading transactions...</p>
-          </div>
-        )}
-
-        {/* Transactions list */}
-        {transactions.map((tx) => {
-          const txType = getTransactionType(tx.from, tx.to);
           
-          return (
-            <div key={tx.id} className="p-4 hover:bg-gray-50 transition-colors duration-150">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  {getTransactionIcon(txType)}
-                  <div>
-                    <h4 className="font-medium text-gray-800">{getTransactionTitle(txType)}</h4>
-                    <p className="text-xs text-gray-500">
-                      {txType === 'sent' ? 'To: ' : 'From: '}
-                      {truncateAddress(txType === 'sent' ? tx.to : tx.from)}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="font-medium text-gray-800">{formatAmount(tx.value, txType)}</p>
-                  <p className="text-xs text-gray-500">
-                    {formatDistanceToNow(new Date(tx.timestamp), { addSuffix: true })}
-                  </p>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-
-        {transactions.length > 0 && (
-          <div className="p-4 text-center">
-            <Button variant="ghost" size="sm" className="text-primary text-sm font-medium hover:underline">
-              View all transactions
-            </Button>
+          <div className="flex items-center space-x-2">
+            <StatusBadge status={tx.status} />
           </div>
-        )}
-      </div>
-    </Card>
+        </div>
+      ))}
+    </div>
   );
-};
-
-export default TransactionHistory;
+}

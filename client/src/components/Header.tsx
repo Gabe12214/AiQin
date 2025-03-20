@@ -14,7 +14,6 @@ const Header: React.FC = () => {
           <h1 className="text-xl font-bold">AIQin</h1>
         </div>
         <div className="flex items-center space-x-3">
-          <NetworkSelector />
           <ConnectButton />
         </div>
       </div>

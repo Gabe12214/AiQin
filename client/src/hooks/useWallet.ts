@@ -323,6 +323,17 @@ export function useWallet() {
     }
   }, [checkWalletInstalled, handleAccountsChanged, handleChainChanged]);
 
+  // Refresh balance manually
+  const refreshBalance = useCallback(async () => {
+    if (account && currentNetwork) {
+      await updateBalance(account, currentNetwork);
+      toast({
+        title: "Balance Updated",
+        description: "Your wallet balance has been refreshed",
+      });
+    }
+  }, [account, currentNetwork, toast, updateBalance]);
+
   return {
     isConnected,
     isConnecting,
@@ -337,5 +348,16 @@ export function useWallet() {
     switchNetwork: handleSwitchNetwork,
     addNetwork: handleAddNetwork,
     isWalletInstalled: checkWalletInstalled(),
+    // Additional properties needed for components
+    selectedNetwork: currentNetwork,
+    networks: availableNetworks,
+    isLoadingNetworks: false,
+    handleNetworkSelect: handleSwitchNetwork,
+    walletAddress: account,
+    walletBalance: balance,
+    isLoadingBalance: isConnecting,
+    handleConnectWallet: connect,
+    refreshBalance,
+    handleConnect: connect
   };
 }
