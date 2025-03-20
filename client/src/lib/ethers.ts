@@ -1,12 +1,27 @@
 import { ethers } from "ethers";
 
-// Initialize ethers with the browser provider (MetaMask)
+// Interface for network configuration
+export interface WalletNetwork {
+  chainId: number;
+  name: string;
+  rpcUrl: string;
+  symbol: string;
+  blockExplorerUrl: string;
+  isDefault?: boolean;
+}
+
+// Initialize ethers with the browser provider (MetaMask or other wallets)
 export function getProvider(): ethers.BrowserProvider | null {
   if (typeof window === 'undefined' || !window.ethereum) {
     return null;
   }
 
   return new ethers.BrowserProvider(window.ethereum);
+}
+
+// Get a provider for a specific network with RPC URL
+export function getNetworkProvider(rpcUrl: string): ethers.JsonRpcProvider {
+  return new ethers.JsonRpcProvider(rpcUrl);
 }
 
 // Get the signer for transaction signing
@@ -64,8 +79,37 @@ export async function getNetwork(): Promise<{ chainId: number, name: string }> {
   };
 }
 
+// Add a new network to MetaMask
+export async function addNetwork(network: WalletNetwork): Promise<boolean> {
+  if (!window.ethereum) throw new Error("No provider found. Please install MetaMask.");
+  
+  try {
+    const params = {
+      chainId: `0x${network.chainId.toString(16)}`,
+      chainName: network.name,
+      nativeCurrency: {
+        name: network.symbol,
+        symbol: network.symbol,
+        decimals: 18
+      },
+      rpcUrls: [network.rpcUrl],
+      blockExplorerUrls: [network.blockExplorerUrl]
+    };
+
+    await window.ethereum.request({
+      method: "wallet_addEthereumChain",
+      params: [params],
+    });
+    
+    return true;
+  } catch (error) {
+    console.error("Error adding network:", error);
+    return false;
+  }
+}
+
 // Switch to a different network
-export async function switchNetwork(chainId: number): Promise<boolean> {
+export async function switchNetwork(chainId: number, networkInfo?: WalletNetwork): Promise<boolean> {
   if (!window.ethereum) throw new Error("No provider found. Please install MetaMask.");
   
   try {
@@ -79,18 +123,27 @@ export async function switchNetwork(chainId: number): Promise<boolean> {
     return true;
   } catch (error: any) {
     // This error code indicates that the chain has not been added to MetaMask.
-    if (error.code === 4902) {
-      console.error("Network not available in wallet");
+    if (error.code === 4902 && networkInfo) {
+      // If the network is not available, try to add it
+      return await addNetwork(networkInfo);
     }
     console.error("Error switching network:", error);
     return false;
   }
 }
 
-// Get balance for an address
-export async function getBalance(address: string): Promise<string> {
-  const provider = getProvider();
-  if (!provider) throw new Error("No provider found. Please install MetaMask.");
+// Get balance for an address on a specific network
+export async function getBalance(address: string, network?: WalletNetwork): Promise<string> {
+  let provider;
+  
+  if (network) {
+    // Use network-specific provider if a network is specified
+    provider = getNetworkProvider(network.rpcUrl);
+  } else {
+    // Otherwise use the browser provider
+    provider = getProvider();
+    if (!provider) throw new Error("No provider found. Please install MetaMask.");
+  }
   
   try {
     const balance = await provider.getBalance(address);

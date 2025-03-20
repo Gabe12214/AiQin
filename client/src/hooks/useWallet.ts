@@ -3,10 +3,13 @@ import {
   connectWallet, 
   getAccounts, 
   getNetwork, 
-  switchNetwork, 
+  switchNetwork,
+  addNetwork,
   listenToAccountChanges, 
   listenToNetworkChanges, 
-  removeAllListeners 
+  removeAllListeners,
+  getBalance,
+  type WalletNetwork
 } from '@/lib/ethers';
 import { useToast } from '@/hooks/use-toast';
 
@@ -15,6 +18,9 @@ export interface Network {
   name: string;
   chainId: number;
   symbol: string;
+  rpcUrl: string;
+  blockExplorerUrl: string;
+  isDefault?: boolean;
 }
 
 export function useWallet() {
@@ -24,6 +30,8 @@ export function useWallet() {
   const [chainId, setChainId] = useState<number | null>(null);
   const [networkName, setNetworkName] = useState<string>('');
   const [availableNetworks, setAvailableNetworks] = useState<Network[]>([]);
+  const [balance, setBalance] = useState<string>('0');
+  const [currentNetwork, setCurrentNetwork] = useState<Network | null>(null);
   const { toast } = useToast();
 
   // Fetch available networks from the API
@@ -54,11 +62,43 @@ export function useWallet() {
     if (accounts.length === 0) {
       setIsConnected(false);
       setAccount(null);
+      setBalance('0');
     } else {
       setIsConnected(true);
       setAccount(accounts[0]);
+      
+      // Update balance when account changes
+      if (currentNetwork && accounts[0]) {
+        updateBalance(accounts[0], currentNetwork);
+      }
+    }
+  }, [currentNetwork]);
+
+  // Update balance for the current account
+  const updateBalance = useCallback(async (walletAddress: string, network: Network) => {
+    if (!walletAddress) return;
+    
+    try {
+      // Convert to WalletNetwork format
+      const walletNetwork: WalletNetwork = {
+        chainId: network.chainId,
+        name: network.name,
+        rpcUrl: network.rpcUrl,
+        symbol: network.symbol,
+        blockExplorerUrl: network.blockExplorerUrl
+      };
+      
+      const newBalance = await getBalance(walletAddress, walletNetwork);
+      setBalance(newBalance);
+    } catch (error) {
+      console.error('Error updating balance:', error);
     }
   }, []);
+
+  // Find network by chain ID
+  const findNetworkByChainId = useCallback((targetChainId: number) => {
+    return availableNetworks.find(network => network.chainId === targetChainId) || null;
+  }, [availableNetworks]);
 
   // Handle network changes
   const handleChainChanged = useCallback(async (chainIdHex: string) => {
@@ -68,10 +108,21 @@ export function useWallet() {
     try {
       const network = await getNetwork();
       setNetworkName(network.name);
+      
+      // Find the network details from our available networks
+      const foundNetwork = findNetworkByChainId(chainIdDecimal);
+      if (foundNetwork) {
+        setCurrentNetwork(foundNetwork);
+        
+        // Update balance with the new network
+        if (account) {
+          updateBalance(account, foundNetwork);
+        }
+      }
     } catch (error) {
       console.error('Error getting network name:', error);
     }
-  }, []);
+  }, [account, findNetworkByChainId, updateBalance]);
 
   // Connect wallet function
   const connect = useCallback(async () => {
@@ -95,6 +146,15 @@ export function useWallet() {
         const network = await getNetwork();
         setChainId(network.chainId);
         setNetworkName(network.name);
+        
+        // Find the network details from our available networks
+        const foundNetwork = findNetworkByChainId(network.chainId);
+        if (foundNetwork) {
+          setCurrentNetwork(foundNetwork);
+          
+          // Update balance for the connected account
+          updateBalance(accounts[0], foundNetwork);
+        }
         
         // Register the wallet address with our backend
         await fetch('/api/users/wallet', {
@@ -122,7 +182,7 @@ export function useWallet() {
     } finally {
       setIsConnecting(false);
     }
-  }, [checkWalletInstalled, toast]);
+  }, [checkWalletInstalled, findNetworkByChainId, toast, updateBalance]);
 
   // Disconnect wallet function
   const disconnect = useCallback(() => {
@@ -130,6 +190,8 @@ export function useWallet() {
     setAccount(null);
     setChainId(null);
     setNetworkName('');
+    setBalance('0');
+    setCurrentNetwork(null);
     
     toast({
       title: "Disconnected",
@@ -137,13 +199,69 @@ export function useWallet() {
     });
   }, [toast]);
 
+  // Add a new network to the wallet
+  const handleAddNetwork = useCallback(async (network: Network) => {
+    try {
+      // Convert to WalletNetwork format
+      const walletNetwork: WalletNetwork = {
+        chainId: network.chainId,
+        name: network.name,
+        rpcUrl: network.rpcUrl,
+        symbol: network.symbol,
+        blockExplorerUrl: network.blockExplorerUrl
+      };
+      
+      const success = await addNetwork(walletNetwork);
+      if (success) {
+        toast({
+          title: "Network Added",
+          description: `${network.name} has been added to your wallet`,
+        });
+        return true;
+      } else {
+        toast({
+          title: "Failed to Add Network",
+          description: "There was an error adding the network",
+          variant: "destructive"
+        });
+        return false;
+      }
+    } catch (error) {
+      console.error('Error adding network:', error);
+      toast({
+        title: "Network Add Failed",
+        description: "Failed to add network. Please try again.",
+        variant: "destructive"
+      });
+      return false;
+    }
+  }, [toast]);
+
   // Switch network function
   const handleSwitchNetwork = useCallback(async (network: Network) => {
     try {
-      const success = await switchNetwork(network.chainId);
+      // Convert to WalletNetwork format for the switchNetwork function
+      const walletNetwork: WalletNetwork = {
+        chainId: network.chainId,
+        name: network.name,
+        rpcUrl: network.rpcUrl,
+        symbol: network.symbol,
+        blockExplorerUrl: network.blockExplorerUrl
+      };
+      
+      // Try to switch network, and if the network isn't added yet, it will be added automatically
+      const success = await switchNetwork(network.chainId, walletNetwork);
+      
       if (success) {
         setChainId(network.chainId);
         setNetworkName(network.name);
+        setCurrentNetwork(network);
+        
+        // Update balance with the new network
+        if (account) {
+          updateBalance(account, network);
+        }
+        
         toast({
           title: "Network Changed",
           description: `Connected to ${network.name}`,
@@ -157,7 +275,7 @@ export function useWallet() {
         variant: "destructive"
       });
     }
-  }, [toast]);
+  }, [account, toast, updateBalance]);
 
   // Check initial connection status
   useEffect(() => {
@@ -172,6 +290,15 @@ export function useWallet() {
             const network = await getNetwork();
             setChainId(network.chainId);
             setNetworkName(network.name);
+            
+            // Find the network details from our available networks
+            const foundNetwork = findNetworkByChainId(network.chainId);
+            if (foundNetwork) {
+              setCurrentNetwork(foundNetwork);
+              
+              // Update balance for the connected account
+              updateBalance(accounts[0], foundNetwork);
+            }
           }
         } catch (error) {
           console.error('Error checking wallet connection:', error);
@@ -181,7 +308,7 @@ export function useWallet() {
     
     fetchNetworks();
     checkConnection();
-  }, [checkWalletInstalled, fetchNetworks]);
+  }, [checkWalletInstalled, fetchNetworks, findNetworkByChainId, updateBalance]);
 
   // Set up event listeners
   useEffect(() => {
@@ -202,10 +329,13 @@ export function useWallet() {
     account,
     chainId,
     networkName,
+    balance,
+    currentNetwork,
     availableNetworks,
     connect,
     disconnect,
     switchNetwork: handleSwitchNetwork,
+    addNetwork: handleAddNetwork,
     isWalletInstalled: checkWalletInstalled(),
   };
 }
