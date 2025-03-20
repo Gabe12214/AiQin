@@ -12,25 +12,34 @@ export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByWalletAddress(walletAddress: string): Promise<User | undefined>;
+  getAllUsers(): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
   updateUserWalletAddress(id: number, walletAddress: string): Promise<User | undefined>;
+  updateUser(id: number, userData: Partial<InsertUser>): Promise<User | undefined>;
+  deleteUser(id: number): Promise<boolean>;
   
   // Network methods
   getNetworks(): Promise<Network[]>;
   getNetwork(id: number): Promise<Network | undefined>;
   getNetworkByChainId(chainId: number): Promise<Network | undefined>;
   createNetwork(network: InsertNetwork): Promise<Network>;
+  updateNetwork(id: number, networkData: Partial<InsertNetwork>): Promise<Network | undefined>;
+  deleteNetwork(id: number): Promise<boolean>;
   
   // Transaction methods
   getTransactions(userId: number): Promise<Transaction[]>;
+  getAllTransactions(): Promise<Transaction[]>;
   getTransaction(id: number): Promise<Transaction | undefined>;
   createTransaction(transaction: InsertTransaction): Promise<Transaction>;
   updateTransactionStatus(id: number, status: string): Promise<Transaction | undefined>;
+  deleteTransaction(id: number): Promise<boolean>;
   
   // Dapp methods
   getDapps(): Promise<Dapp[]>;
   getDapp(id: number): Promise<Dapp | undefined>;
   createDapp(dapp: InsertDapp): Promise<Dapp>;
+  updateDapp(id: number, dappData: Partial<InsertDapp>): Promise<Dapp | undefined>;
+  deleteDapp(id: number): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -53,9 +62,16 @@ export class MemStorage implements IStorage {
     this.currentTransactionId = 1;
     this.currentDappId = 1;
     
-    // Initialize with default networks
+    // Initialize with default networks and data
     this.initDefaultNetworks();
     this.initDefaultDapps();
+    
+    // Create admin user
+    this.createUser({
+      username: "admin",
+      password: "admin123", // For a real app, this would be hashed
+      isAdmin: true
+    });
   }
 
   private initDefaultNetworks() {
@@ -154,6 +170,10 @@ export class MemStorage implements IStorage {
       (user) => user.walletAddress === walletAddress,
     );
   }
+  
+  async getAllUsers(): Promise<User[]> {
+    return Array.from(this.users.values());
+  }
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = this.currentUserId++;
@@ -177,6 +197,20 @@ export class MemStorage implements IStorage {
     const updatedUser: User = { ...user, walletAddress };
     this.users.set(id, updatedUser);
     return updatedUser;
+  }
+  
+  async updateUser(id: number, userData: Partial<InsertUser>): Promise<User | undefined> {
+    const user = await this.getUser(id);
+    if (!user) return undefined;
+    
+    const updatedUser: User = { ...user, ...userData };
+    this.users.set(id, updatedUser);
+    return updatedUser;
+  }
+  
+  async deleteUser(id: number): Promise<boolean> {
+    const success = this.users.delete(id);
+    return success;
   }
 
   // Network methods
@@ -205,12 +239,35 @@ export class MemStorage implements IStorage {
     this.networks.set(id, network);
     return network;
   }
+  
+  async updateNetwork(id: number, networkData: Partial<InsertNetwork>): Promise<Network | undefined> {
+    const network = await this.getNetwork(id);
+    if (!network) return undefined;
+    
+    const updatedNetwork: Network = { ...network, ...networkData };
+    this.networks.set(id, updatedNetwork);
+    return updatedNetwork;
+  }
+  
+  async deleteNetwork(id: number): Promise<boolean> {
+    const network = await this.getNetwork(id);
+    if (!network) return false;
+    
+    // Don't allow deleting default network
+    if (network.isDefault) return false;
+    
+    return this.networks.delete(id);
+  }
 
   // Transaction methods
   async getTransactions(userId: number): Promise<Transaction[]> {
     return Array.from(this.transactions.values()).filter(
       (transaction) => transaction.userId === userId,
     );
+  }
+  
+  async getAllTransactions(): Promise<Transaction[]> {
+    return Array.from(this.transactions.values());
   }
 
   async getTransaction(id: number): Promise<Transaction | undefined> {
@@ -233,6 +290,10 @@ export class MemStorage implements IStorage {
     this.transactions.set(id, updatedTransaction);
     return updatedTransaction;
   }
+  
+  async deleteTransaction(id: number): Promise<boolean> {
+    return this.transactions.delete(id);
+  }
 
   // Dapp methods
   async getDapps(): Promise<Dapp[]> {
@@ -248,6 +309,19 @@ export class MemStorage implements IStorage {
     const dapp: Dapp = { ...insertDapp, id };
     this.dapps.set(id, dapp);
     return dapp;
+  }
+  
+  async updateDapp(id: number, dappData: Partial<InsertDapp>): Promise<Dapp | undefined> {
+    const dapp = await this.getDapp(id);
+    if (!dapp) return undefined;
+    
+    const updatedDapp: Dapp = { ...dapp, ...dappData };
+    this.dapps.set(id, updatedDapp);
+    return updatedDapp;
+  }
+  
+  async deleteDapp(id: number): Promise<boolean> {
+    return this.dapps.delete(id);
   }
 }
 
@@ -341,6 +415,16 @@ export class PgStorage implements IStorage {
         await this.createDapp(dapp);
       }
     }
+    
+    // Create an admin user if none exists
+    const userCount = await db.select().from(users).execute();
+    if (userCount.length === 0) {
+      await this.createUser({
+        username: "admin",
+        password: "admin123",  // In a real app, this would be hashed
+        isAdmin: true
+      });
+    }
   }
 
   // User methods
@@ -358,6 +442,10 @@ export class PgStorage implements IStorage {
     const results = await db.select().from(users).where(eq(users.walletAddress, walletAddress)).execute();
     return results[0];
   }
+  
+  async getAllUsers(): Promise<User[]> {
+    return await db.select().from(users).execute();
+  }
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const results = await db.insert(users).values(insertUser).returning().execute();
@@ -372,6 +460,29 @@ export class PgStorage implements IStorage {
       .returning()
       .execute();
     return results[0];
+  }
+  
+  async updateUser(id: number, userData: Partial<InsertUser>): Promise<User | undefined> {
+    const results = await db
+      .update(users)
+      .set(userData)
+      .where(eq(users.id, id))
+      .returning()
+      .execute();
+    return results[0];
+  }
+  
+  async deleteUser(id: number): Promise<boolean> {
+    try {
+      await db
+        .delete(users)
+        .where(eq(users.id, id))
+        .execute();
+      return true;
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      return false;
+    }
   }
 
   // Network methods
@@ -393,10 +504,37 @@ export class PgStorage implements IStorage {
     const results = await db.insert(networks).values(insertNetwork).returning().execute();
     return results[0];
   }
+  
+  async updateNetwork(id: number, networkData: Partial<InsertNetwork>): Promise<Network | undefined> {
+    const results = await db
+      .update(networks)
+      .set(networkData)
+      .where(eq(networks.id, id))
+      .returning()
+      .execute();
+    return results[0];
+  }
+  
+  async deleteNetwork(id: number): Promise<boolean> {
+    try {
+      await db
+        .delete(networks)
+        .where(eq(networks.id, id))
+        .execute();
+      return true;
+    } catch (error) {
+      console.error("Error deleting network:", error);
+      return false;
+    }
+  }
 
   // Transaction methods
   async getTransactions(userId: number): Promise<Transaction[]> {
     return await db.select().from(transactions).where(eq(transactions.userId, userId)).execute();
+  }
+  
+  async getAllTransactions(): Promise<Transaction[]> {
+    return await db.select().from(transactions).execute();
   }
 
   async getTransaction(id: number): Promise<Transaction | undefined> {
@@ -418,6 +556,19 @@ export class PgStorage implements IStorage {
       .execute();
     return results[0];
   }
+  
+  async deleteTransaction(id: number): Promise<boolean> {
+    try {
+      await db
+        .delete(transactions)
+        .where(eq(transactions.id, id))
+        .execute();
+      return true;
+    } catch (error) {
+      console.error("Error deleting transaction:", error);
+      return false;
+    }
+  }
 
   // Dapp methods
   async getDapps(): Promise<Dapp[]> {
@@ -432,6 +583,29 @@ export class PgStorage implements IStorage {
   async createDapp(insertDapp: InsertDapp): Promise<Dapp> {
     const results = await db.insert(dapps).values(insertDapp).returning().execute();
     return results[0];
+  }
+  
+  async updateDapp(id: number, dappData: Partial<InsertDapp>): Promise<Dapp | undefined> {
+    const results = await db
+      .update(dapps)
+      .set(dappData)
+      .where(eq(dapps.id, id))
+      .returning()
+      .execute();
+    return results[0];
+  }
+  
+  async deleteDapp(id: number): Promise<boolean> {
+    try {
+      await db
+        .delete(dapps)
+        .where(eq(dapps.id, id))
+        .execute();
+      return true;
+    } catch (error) {
+      console.error("Error deleting dapp:", error);
+      return false;
+    }
   }
 }
 
